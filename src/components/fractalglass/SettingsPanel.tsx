@@ -114,6 +114,7 @@ function MinimalSlider({
         max={max}
         step={step}
         value={value}
+        onInput={(e) => onChange(parseFloat((e.target as HTMLInputElement).value))}
         onChange={(e) => onChange(parseFloat(e.target.value))}
         className="absolute inset-0 w-full opacity-0 cursor-pointer"
       />

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
+import { SnowEffect } from "@/components/effects/SnowEffect";
 
 interface Effect {
   name: string;
@@ -54,8 +55,10 @@ function EffectCard({ effect }: { effect: Effect }) {
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-zinc-950 text-white">
-      <div className="max-w-2xl mx-auto px-6 py-24">
+    <main className="min-h-screen bg-zinc-950 text-white relative">
+      <SnowEffect />
+
+      <div className="max-w-2xl mx-auto px-6 py-24 relative z-10">
         {/* Header */}
         <header className="mb-20">
           <h1 className="text-3xl font-light tracking-tight mb-2">
