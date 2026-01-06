@@ -11,7 +11,7 @@ export interface GlassSettings {
   noiseScale: number;
   displacementStrength: number;
   lineFrequency: number;
-  lineSharpness: number;
+  ridgeWaviness: number;
   animationSpeed: number;
   grainIntensity: number;
   contrastBoost: number;
@@ -139,7 +139,7 @@ export function SettingsPanel({ settings, onSettingsChange }: SettingsPanelProps
                 {/* Noise Scale */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
-                    <Label className="text-white/80">Blob Size</Label>
+                    <Label className="text-white/80">Gradient Scale</Label>
                     <span className="text-white/50 font-mono">{settings.noiseScale.toFixed(2)}</span>
                   </div>
                   <Slider
@@ -155,13 +155,13 @@ export function SettingsPanel({ settings, onSettingsChange }: SettingsPanelProps
                 {/* Displacement Strength */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
-                    <Label className="text-white/80">Line Bend</Label>
+                    <Label className="text-white/80">Ridge Depth</Label>
                     <span className="text-white/50 font-mono">{settings.displacementStrength.toFixed(2)}</span>
                   </div>
                   <Slider
                     value={[settings.displacementStrength]}
-                    min={0.05}
-                    max={0.5}
+                    min={0.02}
+                    max={0.4}
                     step={0.01}
                     onValueChange={([v]) => onSettingsChange({ displacementStrength: v })}
                     className="[&_[role=slider]]:bg-white"
@@ -171,31 +171,31 @@ export function SettingsPanel({ settings, onSettingsChange }: SettingsPanelProps
                 {/* Line Frequency */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
-                    <Label className="text-white/80">Line Density</Label>
+                    <Label className="text-white/80">Ridge Count</Label>
                     <span className="text-white/50 font-mono">{settings.lineFrequency.toFixed(0)}</span>
                   </div>
                   <Slider
                     value={[settings.lineFrequency]}
-                    min={40}
-                    max={250}
+                    min={20}
+                    max={200}
                     step={5}
                     onValueChange={([v]) => onSettingsChange({ lineFrequency: v })}
                     className="[&_[role=slider]]:bg-white"
                   />
                 </div>
 
-                {/* Line Sharpness */}
+                {/* Ridge Waviness */}
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs">
-                    <Label className="text-white/80">Line Sharpness</Label>
-                    <span className="text-white/50 font-mono">{settings.lineSharpness.toFixed(2)}</span>
+                    <Label className="text-white/80">Ridge Waviness</Label>
+                    <span className="text-white/50 font-mono">{settings.ridgeWaviness.toFixed(2)}</span>
                   </div>
                   <Slider
-                    value={[settings.lineSharpness]}
-                    min={0.1}
-                    max={0.95}
+                    value={[settings.ridgeWaviness]}
+                    min={0}
+                    max={1.5}
                     step={0.05}
-                    onValueChange={([v]) => onSettingsChange({ lineSharpness: v })}
+                    onValueChange={([v]) => onSettingsChange({ ridgeWaviness: v })}
                     className="[&_[role=slider]]:bg-white"
                   />
                 </div>

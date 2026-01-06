@@ -8,7 +8,7 @@ const defaultSettings: GlassSettings = {
   noiseScale: 1.0,
   displacementStrength: 0.15,
   lineFrequency: 120,
-  lineSharpness: 0.5,
+  ridgeWaviness: 0.5,
   animationSpeed: 0.1,
   grainIntensity: 0.04,
   contrastBoost: 1.3,
@@ -26,12 +26,12 @@ export default function FractalGlassPage() {
   };
 
   return (
-    <main className="relative min-h-screen bg-black">
+    <main className="relative min-h-screen">
       <FractalGlassBackground
         noiseScale={settings.noiseScale}
         displacementStrength={settings.displacementStrength}
         lineFrequency={settings.lineFrequency}
-        lineSharpness={settings.lineSharpness}
+        ridgeWaviness={settings.ridgeWaviness}
         animationSpeed={settings.animationSpeed}
         grainIntensity={settings.grainIntensity}
         contrastBoost={settings.contrastBoost}

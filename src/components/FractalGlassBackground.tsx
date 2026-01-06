@@ -3,14 +3,14 @@
 import { useEffect, useRef } from "react";
 
 export interface FractalGlassProps {
-  /** Scale of the noise blobs (lower = larger blobs) */
+  /** Scale of the gradient flow (lower = larger waves) */
   noiseScale?: number;
-  /** How much lines bend at edges (displacement strength) */
+  /** How much vertical displacement the ridges create */
   displacementStrength?: number;
-  /** Number of vertical lines */
+  /** Number of vertical ridges */
   lineFrequency?: number;
-  /** Line sharpness (0 = soft, 1 = crisp) */
-  lineSharpness?: number;
+  /** Ridge waviness (0 = straight, 1 = wavy) */
+  ridgeWaviness?: number;
   /** Flow animation speed */
   animationSpeed?: number;
   /** Film grain intensity */
@@ -33,7 +33,7 @@ const vertexShaderSource = `
   }
 `;
 
-// Fragment shader with proper gradient-based displacement
+// Fragment shader - CORRECTED: Ridge displacement applied BEFORE color sampling
 const fragmentShaderSource = `
   precision highp float;
   
@@ -43,7 +43,7 @@ const fragmentShaderSource = `
   uniform float u_noiseScale;
   uniform float u_displacementStrength;
   uniform float u_lineFrequency;
-  uniform float u_lineSharpness;
+  uniform float u_ridgeWaviness;
   uniform float u_animationSpeed;
   uniform float u_grainIntensity;
   uniform float u_contrastBoost;
@@ -83,71 +83,80 @@ const fragmentShaderSource = `
   }
   
   // ============================================
-  // LAYER 1: Base Gradient Field (light source)
+  // STEP 1: Smooth flowing gradient field
+  // This is what gets viewed THROUGH the glass
   // ============================================
-  float getBaseNoise(vec2 uv, float time) {
+  float getGradientField(vec2 uv, float time) {
     float t = time * u_animationSpeed;
     
-    // Primary large-scale noise (the main blobs)
-    float n = snoise(uv * 3.0 * u_noiseScale + vec2(t * 0.3, t * 0.2));
+    // Create flowing aurora-like bands using diagonal movement
+    // Much larger scale, smoother than the blobby noise
+    float flow = snoise(vec2(uv.x * 0.8, uv.y * 2.5) * u_noiseScale + vec2(t * 0.15, t * 0.3));
     
-    // Secondary octave for organic feel
-    n += 0.5 * snoise(uv * 5.0 * u_noiseScale + vec2(-t * 0.2, t * 0.25));
+    // Add secondary wave for organic feel - travels diagonally
+    flow += 0.6 * snoise(vec2(uv.x * 1.2, uv.y * 1.8) * u_noiseScale + vec2(-t * 0.2, t * 0.15));
     
-    // Third octave for subtle detail
-    n += 0.25 * snoise(uv * 8.0 * u_noiseScale + vec2(t * 0.15, -t * 0.1));
+    // Third layer for subtle variation
+    flow += 0.3 * snoise(vec2(uv.x * 2.0, uv.y * 0.8) * u_noiseScale + vec2(t * 0.1, -t * 0.2));
     
-    // Normalize to 0-1 range
-    n = n * 0.5 + 0.5;
+    // Normalize to 0-1
+    flow = flow * 0.35 + 0.5;
     
-    // Apply contrast boost for deep darks and bright brights
-    n = pow(n, u_contrastBoost);
+    // S-curve for smooth transitions between light and dark
+    flow = smoothstep(0.0, 1.0, flow);
     
-    return clamp(n, 0.0, 1.0);
+    // Apply contrast
+    flow = pow(flow, u_contrastBoost);
+    
+    return clamp(flow, 0.0, 1.0);
   }
   
   // ============================================
-  // LAYER 2: Displacement from Noise GRADIENT
+  // STEP 2: Vertical ridge pattern
+  // Returns displacement amount for Y coordinate
   // ============================================
-  float getDisplacement(vec2 uv, float time) {
-    float eps = 0.005; // Small epsilon for numerical derivative
+  float getRidgeDisplacement(vec2 uv, float time) {
+    float t = time * u_animationSpeed * 0.5;
     
-    // Sample noise at positions slightly left and right
-    float noiseLeft = getBaseNoise(vec2(uv.x - eps, uv.y), time);
-    float noiseRight = getBaseNoise(vec2(uv.x + eps, uv.y), time);
+    // Base x position for the ridge
+    float ridgeX = uv.x * u_lineFrequency;
     
-    // Calculate horizontal gradient (derivative)
-    // This is HIGH at edges (where light meets dark)
-    // and LOW in flat areas (centers of blobs)
-    float gradientX = (noiseRight - noiseLeft) / (2.0 * eps);
+    // Add waviness - ridges undulate slightly
+    float wave = snoise(vec2(uv.x * 3.0, uv.y * 8.0 + t)) * u_ridgeWaviness * 0.3;
+    ridgeX += wave;
     
-    return gradientX;
+    // Create the ridge pattern using sine
+    float ridge = sin(ridgeX * 6.28318);
+    
+    // Shape the ridge - peaks and valleys
+    // This creates the actual displacement amount
+    float displacement = ridge;
+    
+    // Add variation along Y - ridges aren't perfectly uniform
+    float yVariation = snoise(vec2(uv.x * 5.0, uv.y * 2.0 + t * 0.3)) * 0.3;
+    displacement *= (1.0 + yVariation);
+    
+    return displacement;
   }
   
   // ============================================
-  // COLOR RAMP: Map noise value to colors
+  // STEP 3: Color ramp
   // ============================================
   vec3 colorRamp(float n) {
-    // Four-stop gradient: dark -> mid -> bright -> accent
     vec3 color;
     
-    if (n < 0.25) {
-      // Deep dark to mid-dark
-      color = mix(u_colorDark, u_colorMid, n / 0.25);
-    } else if (n < 0.55) {
-      // Mid-dark to bright
-      color = mix(u_colorMid, u_colorBright, (n - 0.25) / 0.3);
+    if (n < 0.33) {
+      color = mix(u_colorDark, u_colorMid, n / 0.33);
+    } else if (n < 0.66) {
+      color = mix(u_colorMid, u_colorBright, (n - 0.33) / 0.33);
     } else {
-      // Bright to accent (for hottest areas)
-      color = mix(u_colorBright, u_colorAccent, (n - 0.55) / 0.45);
+      color = mix(u_colorBright, u_colorAccent, (n - 0.66) / 0.34);
     }
     
     return color;
   }
   
-  // ============================================
   // Film grain
-  // ============================================
   float random(vec2 st, float seed) {
     return fract(sin(dot(st + seed, vec2(12.9898, 78.233))) * 43758.5453);
   }
@@ -155,53 +164,50 @@ const fragmentShaderSource = `
   void main() {
     vec2 uv = v_texCoord;
     float time = u_time;
-    
-    // Aspect ratio correction for noise sampling
     float aspect = u_resolution.x / u_resolution.y;
-    vec2 noiseUV = vec2(uv.x * aspect, uv.y);
     
-    // LAYER 1: Get base noise at this position
-    float baseNoise = getBaseNoise(noiseUV, time);
+    // ============================================
+    // THE KEY FIX: Displace UV BEFORE color sampling
+    // ============================================
     
-    // LAYER 2: Get gradient-based displacement
-    float gradientX = getDisplacement(noiseUV, time);
+    // Get the ridge displacement for this position
+    float ridgeOffset = getRidgeDisplacement(uv, time);
     
-    // Displace the x-coordinate based on gradient
-    // Lines will CONVERGE where gradient is high (light/dark edges)
-    // Lines will SPREAD where gradient is low (flat areas)
-    float displacedX = uv.x + gradientX * u_displacementStrength;
+    // DISPLACE THE Y COORDINATE based on ridge pattern
+    // This creates the vertical "stretching through glass" effect
+    vec2 displacedUV = uv;
+    displacedUV.y += ridgeOffset * u_displacementStrength;
     
-    // LAYER 3: Render vertical lines using displaced X
-    float linePattern = sin(displacedX * u_lineFrequency * 3.14159);
+    // Aspect-correct for gradient field sampling
+    vec2 gradientUV = vec2(displacedUV.x * aspect, displacedUV.y);
     
-    // Convert to 0-1 and apply sharpness
-    linePattern = linePattern * 0.5 + 0.5;
+    // Sample the gradient field at the DISPLACED position
+    float gradientValue = getGradientField(gradientUV, time);
     
-    // Sharpness control: low = soft gradient, high = crisp lines
-    float edge0 = 0.5 - u_lineSharpness * 0.4;
-    float edge1 = 0.5 + u_lineSharpness * 0.4;
-    float lineAlpha = smoothstep(edge0, edge1, linePattern);
+    // Get color from the gradient
+    vec3 color = colorRamp(gradientValue);
     
-    // Get base color from noise value
-    vec3 baseColor = colorRamp(baseNoise);
+    // ============================================
+    // Add subtle ridge shading for depth
+    // ============================================
     
-    // Apply lines as subtle brightness modulation
-    // Lines darken slightly, creating the ribbed glass look
-    float lineDarkening = mix(0.65, 1.0, lineAlpha);
-    vec3 finalColor = baseColor * lineDarkening;
+    // Ridge peaks are slightly brighter, valleys slightly darker
+    float ridgeShading = ridgeOffset * 0.5 + 0.5; // 0-1 range
+    float shadeFactor = mix(0.85, 1.1, ridgeShading);
+    color *= shadeFactor;
     
-    // Add subtle specular highlight on line ridges
-    float highlight = pow(lineAlpha, 3.0) * baseNoise * 0.15;
-    finalColor += vec3(highlight);
+    // Add subtle specular on ridge peaks
+    float specular = pow(max(ridgeShading, 0.0), 4.0) * 0.08;
+    color += vec3(specular);
     
-    // Add film grain
+    // Film grain
     float grain = (random(uv * u_resolution, time * 10.0) - 0.5) * u_grainIntensity;
-    finalColor += vec3(grain);
+    color += vec3(grain);
     
-    // Ensure we don't clip
-    finalColor = clamp(finalColor, 0.0, 1.0);
+    // Clamp output
+    color = clamp(color, 0.0, 1.0);
     
-    gl_FragColor = vec4(finalColor, 1.0);
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
 
@@ -261,11 +267,11 @@ function createProgram(
 export function FractalGlassBackground({
   noiseScale = 1.0,
   displacementStrength = 0.15,
-  lineFrequency = 120,
-  lineSharpness = 0.5,
+  lineFrequency = 80,
+  ridgeWaviness = 0.5,
   animationSpeed = 0.1,
   grainIntensity = 0.04,
-  contrastBoost = 1.3,
+  contrastBoost = 1.2,
   gradientColors = ["#0a0515", "#581c87", "#ec4899", "#06b6d4"],
 }: FractalGlassProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -322,12 +328,9 @@ export function FractalGlassBackground({
       time: gl.getUniformLocation(program, "u_time"),
       resolution: gl.getUniformLocation(program, "u_resolution"),
       noiseScale: gl.getUniformLocation(program, "u_noiseScale"),
-      displacementStrength: gl.getUniformLocation(
-        program,
-        "u_displacementStrength"
-      ),
+      displacementStrength: gl.getUniformLocation(program, "u_displacementStrength"),
       lineFrequency: gl.getUniformLocation(program, "u_lineFrequency"),
-      lineSharpness: gl.getUniformLocation(program, "u_lineSharpness"),
+      ridgeWaviness: gl.getUniformLocation(program, "u_ridgeWaviness"),
       animationSpeed: gl.getUniformLocation(program, "u_animationSpeed"),
       grainIntensity: gl.getUniformLocation(program, "u_grainIntensity"),
       contrastBoost: gl.getUniformLocation(program, "u_contrastBoost"),
@@ -337,7 +340,7 @@ export function FractalGlassBackground({
       colorAccent: gl.getUniformLocation(program, "u_colorAccent"),
     };
 
-    // Parse colors (dark -> mid -> bright -> accent)
+    // Parse colors
     const colorDark = hexToRgb(gradientColors[0] || "#0a0515");
     const colorMid = hexToRgb(gradientColors[1] || "#581c87");
     const colorBright = hexToRgb(gradientColors[2] || "#ec4899");
@@ -347,7 +350,7 @@ export function FractalGlassBackground({
     gl.uniform1f(uniforms.noiseScale, noiseScale);
     gl.uniform1f(uniforms.displacementStrength, displacementStrength);
     gl.uniform1f(uniforms.lineFrequency, lineFrequency);
-    gl.uniform1f(uniforms.lineSharpness, lineSharpness);
+    gl.uniform1f(uniforms.ridgeWaviness, ridgeWaviness);
     gl.uniform1f(uniforms.animationSpeed, animationSpeed);
     gl.uniform1f(uniforms.grainIntensity, grainIntensity);
     gl.uniform1f(uniforms.contrastBoost, contrastBoost);
@@ -356,12 +359,13 @@ export function FractalGlassBackground({
     gl.uniform3fv(uniforms.colorBright, colorBright);
     gl.uniform3fv(uniforms.colorAccent, colorAccent);
 
+    // Handle resize
     const handleResize = () => {
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = Math.min(window.devicePixelRatio, 2);
       canvas.width = window.innerWidth * dpr;
       canvas.height = window.innerHeight * dpr;
-      canvas.style.width = window.innerWidth + "px";
-      canvas.style.height = window.innerHeight + "px";
+      canvas.style.width = `${window.innerWidth}px`;
+      canvas.style.height = `${window.innerHeight}px`;
       gl.viewport(0, 0, canvas.width, canvas.height);
       gl.uniform2f(uniforms.resolution, canvas.width, canvas.height);
     };
@@ -369,8 +373,8 @@ export function FractalGlassBackground({
     handleResize();
     window.addEventListener("resize", handleResize);
 
+    // Animation loop
     const startTime = performance.now();
-
     const render = () => {
       const elapsed = (performance.now() - startTime) / 1000;
       gl.uniform1f(uniforms.time, elapsed);
@@ -386,14 +390,12 @@ export function FractalGlassBackground({
       gl.deleteProgram(program);
       gl.deleteShader(vertexShader);
       gl.deleteShader(fragmentShader);
-      gl.deleteBuffer(positionBuffer);
-      gl.deleteBuffer(texCoordBuffer);
     };
   }, [
     noiseScale,
     displacementStrength,
     lineFrequency,
-    lineSharpness,
+    ridgeWaviness,
     animationSpeed,
     grainIntensity,
     contrastBoost,
@@ -403,8 +405,10 @@ export function FractalGlassBackground({
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0"
-      style={{ width: "100vw", height: "100vh" }}
+      className="fixed inset-0 w-full h-full -z-10"
+      style={{ background: "#0a0515" }}
     />
   );
 }
+
+export default FractalGlassBackground;
